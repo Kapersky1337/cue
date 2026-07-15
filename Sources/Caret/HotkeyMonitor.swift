@@ -10,9 +10,11 @@ import Carbon.HIToolbox
 ///    events in our own windows, and when macOS disables it on timeout we get told
 ///    and re-enable. Right ⌘ is detected via its device bit (0x10), not the generic
 ///    .command flag, so holding left ⌘ can't wedge the state machine.
-/// 2. **⌥Space** — a Carbon RegisterEventHotKey, which needs *no permissions at all*.
+/// 2. **⇧⌥Space** — a Carbon RegisterEventHotKey, which needs *no permissions at all*.
 ///    Even a user who never grants Accessibility can summon Cue (capture/paste stay
 ///    degraded until they do, but the app is alive and visibly working).
+///    ⇧⌥ specifically because plain ⌥Space is Raycast's and Alfred's default, and
+///    ⌃Space / ⌃⌥Space are macOS input-source switching.
 ///
 /// `health` reports which path is live so the menubar can say so instead of looking
 /// fine and doing nothing.
@@ -22,7 +24,7 @@ final class HotkeyMonitor {
         case active
         /// Tap creation failed but NSEvent monitors are in (rare; AX present but tap denied).
         case fallback
-        /// No Accessibility — only ⌥Space works.
+        /// No Accessibility — only ⇧⌥Space works.
         case noPermission
     }
 
@@ -61,7 +63,7 @@ final class HotkeyMonitor {
             return
         }
         installMonitors()
-        NSLog("[Cue] hotkey: tap unavailable (AX trusted=\(AXIsProcessTrusted())) — NSEvent fallback \(globalMonitor == nil ? "FAILED" : "installed"); ⌥Space always live")
+        NSLog("[Cue] hotkey: tap unavailable (AX trusted=\(AXIsProcessTrusted())) — NSEvent fallback \(globalMonitor == nil ? "FAILED" : "installed"); ⇧⌥Space always live")
     }
 
     func stop() {
@@ -142,7 +144,7 @@ final class HotkeyMonitor {
         )
     }
 
-    // MARK: - Carbon ⌥Space path (no permissions required)
+    // MARK: - Carbon ⇧⌥Space path (no permissions required)
 
     private func registerFallbackHotkey() {
         var eventType = EventTypeSpec(
@@ -161,10 +163,11 @@ final class HotkeyMonitor {
         )
         let hotKeyID = EventHotKeyID(signature: OSType(0x4355_4521) /* 'CUE!' */, id: 1)
         let status = RegisterEventHotKey(
-            UInt32(kVK_Space), UInt32(optionKey), hotKeyID,
+            UInt32(kVK_Space), UInt32(optionKey | shiftKey), hotKeyID,
             GetApplicationEventTarget(), 0, &carbonHotKey
         )
-        NSLog("[Cue] hotkey: ⌥Space registered (status=\(status))")
+        // eventHotKeyExistsErr (-9878) = another app owns this combo — worth knowing in logs.
+        NSLog("[Cue] hotkey: ⇧⌥Space registered (status=\(status)\(status == -9878 ? " — TAKEN by another app" : ""))")
     }
 
     // MARK: - Double-tap detection

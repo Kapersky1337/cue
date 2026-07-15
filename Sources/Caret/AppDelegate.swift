@@ -50,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         // Always start: the CGEventTap installs if Accessibility is granted, and the
-        // ⌥Space Carbon hotkey works with zero permissions either way — the app is
+        // ⇧⌥Space Carbon hotkey works with zero permissions either way — the app is
         // never fully dead.
         hotkeyMonitor.start()
         lastTrusted = trusted
@@ -90,8 +90,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func refreshStatusIconState() {
         statusItem.button?.appearsDisabled = !lastTrusted
         statusItem.button?.toolTip = lastTrusted
-            ? "Cue — double-tap right ⌘ or ⌥Space"
-            : "Cue — grant Accessibility to enable the hotkey (⌥Space still works)"
+            ? "Cue — double-tap right ⌘ or ⇧⌥Space"
+            : "Cue — grant Accessibility to enable the hotkey (⇧⌥Space still works)"
     }
 
     private func presentOnboarding() {
@@ -143,7 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 NSLog("[Cue] menubar icon FAILED — falling back to ◐")
                 button.title = "◐"
             }
-            button.toolTip = "Cue — double-tap right ⌘"
+            button.toolTip = "Cue — double-tap right ⌘ or ⇧⌥Space"
         }
         let menu = NSMenu()
         menu.delegate = self // rebuild on every open so provider detection stays fresh
@@ -177,7 +177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         let summon = NSMenuItem(title: "Summon Cue", action: #selector(summon), keyEquivalent: " ")
-        summon.keyEquivalentModifierMask = [.option]
+        summon.keyEquivalentModifierMask = [.option, .shift]
         summon.target = self
         menu.addItem(summon)
 

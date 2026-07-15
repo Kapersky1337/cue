@@ -449,7 +449,7 @@ private struct ReadyStep: View {
                 .frame(maxWidth: 340)
 
             VStack(alignment: .leading, spacing: 6) {
-                shortcutRow("⌥␣",  "Also summons Cue, anywhere")
+                shortcutRow("⇧⌥␣", "Also summons Cue, anywhere")
                 shortcutRow("⌘↩",  "Replace field")
                 shortcutRow("⌘↓",  "Append to field")
                 shortcutRow("⌘C",  "Copy")
