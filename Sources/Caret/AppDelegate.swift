@@ -8,6 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hotkeyMonitor: HotkeyMonitor!
     private var panelController: CaretPanelController!
     private var onboardingController: OnboardingWindowController?
+    private var trustWatchdog: Timer?
+    private var lastTrusted = false
 
     /// Cue is a menubar-only (accessory) app — closing windows is never a quit signal.
     /// macOS's default for this varies across versions; pinning it to false ensures the
@@ -47,15 +49,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
 
+        // Always start: the CGEventTap installs if Accessibility is granted, and the
+        // ⌥Space Carbon hotkey works with zero permissions either way — the app is
+        // never fully dead.
+        hotkeyMonitor.start()
+        lastTrusted = trusted
+        refreshStatusIconState()
+        startTrustWatchdog()
+
         // Onboarding shows once, ever — based on the persisted flag. We never re-trigger
         // it on launch or pop the system AX dialog out of context. Returning users who
         // need to repair permissions can use the menubar's "Show Onboarding…" item.
         if !Settings.hasCompletedOnboarding {
             presentOnboarding()
-            if trusted { hotkeyMonitor.start() } // re-running onboarding on a granted machine
-        } else {
-            hotkeyMonitor.start()
         }
+    }
+
+    /// The relaunch ritual, retired. Every 2s: if Accessibility trust changed in either
+    /// direction — user toggled it in System Settings, TCC went stale after an update —
+    /// reinstall the hotkey listener and update the icon. Users should never have to
+    /// know that macOS binds event taps to the permission state at install time.
+    private func startTrustWatchdog() {
+        trustWatchdog = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self else { return }
+                let trusted = AccessibilityCheck.isReallyGranted()
+                let monitorDegraded = trusted && self.hotkeyMonitor.health == .noPermission
+                if trusted != self.lastTrusted || monitorDegraded {
+                    NSLog("[Cue] trust watchdog: trusted=\(trusted) (was \(self.lastTrusted)), health=\(self.hotkeyMonitor.health) — reinstalling hotkey")
+                    self.lastTrusted = trusted
+                    self.hotkeyMonitor.start()
+                    self.refreshStatusIconState()
+                }
+            }
+        }
+    }
+
+    /// Dim the menubar icon when the double-tap can't work, so a dead hotkey is
+    /// visible instead of indistinguishable from a healthy one.
+    private func refreshStatusIconState() {
+        statusItem.button?.appearsDisabled = !lastTrusted
+        statusItem.button?.toolTip = lastTrusted
+            ? "Cue — double-tap right ⌘ or ⌥Space"
+            : "Cue — grant Accessibility to enable the hotkey (⌥Space still works)"
     }
 
     private func presentOnboarding() {
@@ -123,7 +159,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func rebuildMenu(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        let summon = NSMenuItem(title: "Summon Cue", action: #selector(summon), keyEquivalent: "")
+        // A dead hotkey announces itself at the top of the menu instead of hiding.
+        if hotkeyMonitor.health == .noPermission {
+            let warning = NSMenuItem(
+                title: "Hotkey inactive — grant Accessibility…",
+                action: #selector(fixPermissions),
+                keyEquivalent: ""
+            )
+            warning.target = self
+            warning.attributedTitle = NSAttributedString(
+                string: "⚠︎ Hotkey inactive — grant Accessibility…",
+                attributes: [.foregroundColor: NSColor.systemOrange,
+                             .font: NSFont.menuFont(ofSize: 13)]
+            )
+            menu.addItem(warning)
+            menu.addItem(.separator())
+        }
+
+        let summon = NSMenuItem(title: "Summon Cue", action: #selector(summon), keyEquivalent: " ")
+        summon.keyEquivalentModifierMask = [.option]
         summon.target = self
         menu.addItem(summon)
 

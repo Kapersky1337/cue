@@ -232,7 +232,7 @@ private struct SetupStep: View {
                     title: "Accessibility access",
                     subtitle: state.accessibilityGranted
                         ? "Cue can read your text field and paste back."
-                        : "System Settings → Privacy → Accessibility → toggle Cue ON. Already on? Toggle it off and on to refresh.",
+                        : "System Settings → Privacy → Accessibility → toggle Cue ON. Cue detects it the moment you flip it.",
                     isComplete: state.accessibilityGranted,
                     actionTitle: "Open Settings",
                     action: SetupActions.openAccessibilityPane
@@ -449,6 +449,7 @@ private struct ReadyStep: View {
                 .frame(maxWidth: 340)
 
             VStack(alignment: .leading, spacing: 6) {
+                shortcutRow("⌥␣",  "Also summons Cue, anywhere")
                 shortcutRow("⌘↩",  "Replace field")
                 shortcutRow("⌘↓",  "Append to field")
                 shortcutRow("⌘C",  "Copy")
