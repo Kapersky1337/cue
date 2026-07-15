@@ -1,38 +1,41 @@
 import Foundation
 
-/// Models the user can pick from. Maps to `--model` flag values for `claude -p`.
-enum CueModel: String, CaseIterable {
-    case haiku = "claude-haiku-4-5"
-    case sonnet = "claude-sonnet-4-5"
-    case opus = "claude-opus-4-5"
-
-    var displayName: String {
-        switch self {
-        case .haiku: return "Haiku 4.5"
-        case .sonnet: return "Sonnet 4.5"
-        case .opus: return "Opus 4.5"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .haiku: return "Fastest, default"
-        case .sonnet: return "Balanced"
-        case .opus: return "Deepest"
-        }
-    }
-}
-
-/// Simple UserDefaults-backed settings. Keys are namespaced under "cue.*".
+/// UserDefaults-backed settings. Keys are namespaced under "cue.*".
 enum Settings {
     private static let defaults = UserDefaults.standard
 
-    static var model: CueModel {
+    /// Active AI engine. Defaults to the first detected provider so a Codex-only or
+    /// Ollama-only machine works out of the box with zero configuration.
+    static var provider: Provider {
         get {
-            let raw = defaults.string(forKey: "cue.model") ?? CueModel.haiku.rawValue
-            return CueModel(rawValue: raw) ?? .haiku
+            if let raw = defaults.string(forKey: "cue.provider"),
+               let p = Provider(rawValue: raw) {
+                return p
+            }
+            return Provider.detected().first ?? .claude
         }
-        set { defaults.set(newValue.rawValue, forKey: "cue.model") }
+        set { defaults.set(newValue.rawValue, forKey: "cue.provider") }
+    }
+
+    /// Claude model ID passed to `claude --model`. Key kept from v0.10 ("cue.model");
+    /// stale IDs from old installs fall back to the first current model.
+    static var claudeModel: String {
+        get {
+            let raw = defaults.string(forKey: "cue.model") ?? ""
+            if Provider.claudeModels.contains(where: { $0.id == raw }) { return raw }
+            return Provider.claudeModels[0].id
+        }
+        set { defaults.set(newValue, forKey: "cue.model") }
+    }
+
+    /// Ollama model name passed to `ollama run`. Empty string means "first installed model".
+    static var ollamaModel: String {
+        get {
+            let saved = defaults.string(forKey: "cue.ollamaModel") ?? ""
+            if !saved.isEmpty { return saved }
+            return Provider.ollamaModels().first ?? ""
+        }
+        set { defaults.set(newValue, forKey: "cue.ollamaModel") }
     }
 
     static var hasCompletedOnboarding: Bool {

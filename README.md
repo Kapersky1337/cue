@@ -1,38 +1,46 @@
-# Caret
+# Cue
 
-A 200ms inline assistant for every text field on macOS. Powered by your local `claude` CLI.
+An inline AI assistant for every text field on macOS. Powered by the AI CLIs you already have.
 
 ## What it does
 
-Double-tap **Right Option** anywhere. A single input appears at your cursor. Type. Hit enter. The answer pastes in.
+Double-tap **Right Command** anywhere. A single input appears. Type. Hit enter. The answer pastes in.
 
-- **Empty field**: ask anything, answer streams in at cursor.
-- **Selection**: transform it (rewrite, shorten, sharpen, fix, translate).
+- **Empty field**: ask anything, the answer streams in.
+- **Selection or field content**: transform it (rewrite, shorten, sharpen, fix, translate).
 - **Anywhere**: Slack, iMessage, Gmail, Notion, Linear, Cursor, terminal, browser.
 
-Inherits your Claude Code auth, MCP servers, skills, and CLAUDE.md memory. No subscription. No cloud middleman. No accounts.
+Runs on whichever engine you have installed — no keys, no subscription, no cloud middleman:
+
+| Engine | CLI | Notes |
+| --- | --- | --- |
+| Claude Code | `claude` | Streams; model picker (Haiku 4.5 / Sonnet 5 / Opus 4.8) |
+| Codex | `codex` | Read-only sandbox, ephemeral sessions |
+| Gemini CLI | `gemini` | CLI-default model |
+| Ollama | `ollama` | Fully local; pick any installed model |
+
+Cue inherits each CLI's auth. Switch engine and model from the menu bar.
 
 ## Build
 
 ```bash
 ./build.sh
-open build/Caret.app
+open build/Cue.app
 ```
 
 Grant Accessibility permission when prompted (System Settings → Privacy & Security → Accessibility), then quit and relaunch once.
 
 ## Requirements
 
-- macOS 13+
+- macOS 14+
 - Swift 5.9+
-- `claude` CLI on PATH (`npm i -g @anthropic-ai/claude-code`)
+- Any one of: `claude`, `codex`, `gemini`, or `ollama` on your machine
 
 ## Architecture
 
-- `HotkeyMonitor` — global double-tap detection on Right Option (keyCode 61).
+- `HotkeyMonitor` — global + local double-tap detection on Right Command (keyCode 54).
 - `CursorLocator` — AX API → focused element → `AXBoundsForRange` for caret rect, fallback to element frame, fallback to mouse.
-- `CaretPanel` — borderless non-activating `NSPanel` with SwiftUI `TextField`, anchored just below caret, clamped to screen.
-- `ClaudeClient` — shells `claude -p --model claude-haiku-4-5` with a tight system prompt; captures stdout.
-- `TextInserter` — stash pasteboard → set answer → reactivate prior app → synthesize ⌘V → restore pasteboard. Works in every editable surface.
-
-Model defaults to `claude-haiku-4-5` for sub-second latency. Swap in `ClaudeClient.swift`.
+- `CaretPanel` — borderless non-activating `NSPanel` with SwiftUI `TextField`, clamped to screen.
+- `Providers` — engine detection, binary resolution, per-engine model lists.
+- `LLMClient` — spawns the active engine's CLI with a tight paste-contract prompt; streams where the CLI can.
+- `TextInserter` — stash pasteboard → set answer → reactivate prior app → synthesize ⌘V → restore pasteboard.

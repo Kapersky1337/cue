@@ -81,7 +81,7 @@ final class CaretViewModel: ObservableObject {
         streamTask?.cancel()
         streamTask = Task {
             do {
-                for try await chunk in ClaudeClient.stream(
+                for try await chunk in LLMClient.stream(
                     instruction: trimmed,
                     context: ctx,
                     history: priorHistory
@@ -95,15 +95,15 @@ final class CaretViewModel: ObservableObject {
                 await MainActor.run {
                     if self.response.isEmpty {
                         self.status = .error("No output")
-                    } else if ClaudeClient.isRefusal(self.response) {
-                        // Claude pushed back instead of executing. Don't paste a lecture —
+                    } else if LLMClient.isRefusal(self.response) {
+                        // The model pushed back instead of executing. Don't paste a lecture —
                         // clear the response and prompt the user to rephrase.
                         self.response = ""
                         self.status = .error("Couldn't execute that — try rephrasing.")
                     } else {
-                        // Safety net: strip preamble/postamble Claude sometimes adds
-                        // despite the strict system prompt.
-                        let cleaned = ClaudeClient.cleanResponse(self.response)
+                        // Safety net: strip preamble/postamble models sometimes add
+                        // despite the strict prompt.
+                        let cleaned = LLMClient.cleanResponse(self.response)
                         if cleaned != self.response {
                             withAnimation(.easeOut(duration: 0.18)) {
                                 self.response = cleaned
@@ -130,7 +130,7 @@ final class CaretViewModel: ObservableObject {
         TextInserter.replaceField(with: text, in: context)
     }
 
-    /// ⌘⇧↩ — keep what's there, add the response after it.
+    /// ⌘↓ — keep what's there, add the response after it.
     func appendAndDismiss() {
         let text = response.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }

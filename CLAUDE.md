@@ -1,27 +1,32 @@
-# Caret
+# Cue
 
-A 200ms inline assistant for every text field on macOS. Double-tap Right Option anywhere.
+An inline AI assistant for every text field on macOS. Double-tap Right Command anywhere.
 
 ## Architecture
 
 ```
 main.swift           → App entry, accessory mode
-AppDelegate.swift    → Status item (◐), hotkey setup, panel controller
-HotkeyMonitor.swift  → Global double-tap Right Option (keyCode 61)
+AppDelegate.swift    → Status item, engine/model menus, hotkey setup
+HotkeyMonitor.swift  → Global + local double-tap Right Command (keyCode 54)
 CursorLocator.swift  → AX API → caret rect → fallback element → fallback mouse
-CaretPanel.swift     → Borderless NSPanel, positioned at caret, SwiftUI hosted
-CaretInputView.swift → TextField + status dot + app badge, glass material
-ClaudeClient.swift   → Shells `claude -p --model claude-haiku-4-5`
+CaretPanel.swift     → Borderless NSPanel, SwiftUI hosted
+CaretInputView.swift → TextField + status mark + app badge, glass material
+Providers.swift      → Engine enum (claude/codex/gemini/ollama), detection, models
+LLMClient.swift      → Spawns the active engine's CLI; claude streams JSON,
+                       gemini/ollama stream stdout, codex reads --output-last-message
+Settings.swift       → Provider + per-engine model, UserDefaults
+Setup.swift          → Detection snapshot + install/sign-in actions
+Onboarding.swift     → 3 steps: welcome → accessibility + engine → live try-it
 TextInserter.swift   → Pasteboard stash → answer → ⌘V inject → restore
 ```
 
 ## Build & Run
 
 ```bash
-./build.sh && open build/Caret.app
+./build.sh && open build/Cue.app
 ```
 
-Grant Accessibility (System Settings → Privacy & Security → Accessibility → Caret), then quit and relaunch once.
+Grant Accessibility (System Settings → Privacy & Security → Accessibility → Cue), then quit and relaunch once.
 
 ## Design System
 
@@ -33,7 +38,11 @@ Grant Accessibility (System Settings → Privacy & Security → Accessibility �
 
 ## Development Notes
 
-- Model: `claude-haiku-4-5` for sub-200ms latency. Swap in ClaudeClient.swift
+- Engines are local CLIs — Cue inherits their auth. Detection is filesystem-first;
+  the login-shell fallback runs only at stream time, never in pollers.
+- The paste-contract prompt is short and positively framed on purpose: small local
+  models follow 4 rules + 2 examples far better than a wall of forbidden phrases.
+  `LLMClient.cleanResponse` is the safety net behind it.
 - Panel: `.nonactivatingPanel` keeps focus in original app
 - Insertion: Universal ⌘V works everywhere—Slack, browsers, terminal, Electron apps
 - Coordinate conversion: AX returns Quartz (top-left origin) → convert to Cocoa (bottom-left)

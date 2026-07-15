@@ -2,6 +2,13 @@ import SwiftUI
 import Cocoa
 import ApplicationServices
 
+extension Notification.Name {
+    /// Posted by onboarding the moment accessibility flips to granted, so the app can
+    /// (re)install the global hotkey monitor immediately — this is what makes the
+    /// "try it now" step work before onboarding is finished.
+    static let cueAccessibilityGranted = Notification.Name("cue.accessibilityGranted")
+}
+
 // MARK: - Window
 
 @MainActor
@@ -25,7 +32,7 @@ final class OnboardingWindowController {
         // clicks meant for the close button. Standard titlebar separation makes the
         // traffic-light buttons work correctly with zero hit-testing acrobatics.
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 528),
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 568),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -92,7 +99,6 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
-            // Vibrant blur backdrop, plus a subtle vertical gradient for depth.
             VisualEffectBackdrop()
             LinearGradient(
                 colors: [
@@ -114,7 +120,7 @@ struct OnboardingView: View {
                     }
                 }
                 .padding(.horizontal, 36)
-                .padding(.top, 48)
+                .padding(.top, 44)
                 .padding(.bottom, 18)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .id(step)
@@ -130,7 +136,7 @@ struct OnboardingView: View {
                     .padding(.bottom, 14)
             }
         }
-        .frame(width: 440, height: 528)
+        .frame(width: 440, height: 568)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -139,6 +145,9 @@ struct OnboardingView: View {
         .onReceive(pollTimer) { _ in
             let next = SetupChecks.current()
             if next != setupState {
+                if next.accessibilityGranted && !setupState.accessibilityGranted {
+                    NotificationCenter.default.post(name: .cueAccessibilityGranted, object: nil)
+                }
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
                     setupState = next
                 }
@@ -183,11 +192,18 @@ private struct WelcomeStep: View {
                     .foregroundColor(.primary.opacity(0.55))
             }
 
-            Text("Double-tap right ⌘ wherever you type. Ask Claude to refine, rewrite, summarize, or calculate. Paste with one keystroke.")
+            Text("Double-tap right ⌘ wherever you type. Refine, rewrite, summarize, or calculate — the answer pastes in with one keystroke.")
                 .font(.system(size: 13))
                 .foregroundColor(.primary.opacity(0.72))
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
+                .frame(maxWidth: 320)
+
+            Text("Runs on the AI you already have — Claude Code, Codex, Gemini CLI, or any Ollama model. Your auth, your machine, no middleman.")
+                .font(.system(size: 11.5))
+                .foregroundColor(.primary.opacity(0.5))
+                .multilineTextAlignment(.center)
+                .lineSpacing(2)
                 .frame(maxWidth: 320)
 
             Spacer().frame(height: 4)
@@ -201,53 +217,84 @@ private struct SetupStep: View {
     let advance: () -> Void
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
             VStack(spacing: 6) {
                 Text("Setup")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundColor(.primary)
-                Text("Three quick checks. Cue handles the rest.")
+                Text("Accessibility, plus any one AI engine.")
                     .font(.system(size: 12.5))
                     .foregroundColor(.primary.opacity(0.6))
             }
 
-            VStack(spacing: 0) {
+            card {
                 SetupRow(
                     title: "Accessibility access",
                     subtitle: state.accessibilityGranted
-                        ? "So Cue can read your text field and paste back."
-                        : "In System Settings → Privacy → Accessibility, find Cue and toggle it ON. If it's already on, toggle OFF then ON to refresh.",
+                        ? "Cue can read your text field and paste back."
+                        : "System Settings → Privacy → Accessibility → toggle Cue ON. Already on? Toggle it off and on to refresh.",
                     isComplete: state.accessibilityGranted,
                     actionTitle: "Open Settings",
                     action: SetupActions.openAccessibilityPane
                 )
-                divider()
-                SetupRow(
-                    title: "Claude CLI",
-                    subtitle: state.nodeInstalled
-                        ? "Cue uses your local Claude install."
-                        : "Needs Node.js first.",
-                    isComplete: state.claudeInstalled,
-                    actionTitle: state.nodeInstalled ? "Install" : "Get Node",
-                    action: {
-                        if state.nodeInstalled {
-                            SetupActions.installClaude()
-                        } else {
-                            SetupActions.openNodeInstall()
-                        }
-                    }
-                )
-                divider()
-                SetupRow(
-                    title: "Claude account",
-                    subtitle: "Sign in to your Claude subscription if you haven't.",
-                    isComplete: state.claudeAuthenticated,
-                    actionTitle: "Sign in",
-                    action: SetupActions.signInToClaude,
-                    actionDisabled: !state.claudeInstalled,
-                    optional: true
-                )
             }
+
+            VStack(spacing: 6) {
+                HStack {
+                    Text("AI ENGINE")
+                        .font(.system(size: 10, weight: .semibold))
+                        .tracking(0.8)
+                        .foregroundColor(.primary.opacity(0.45))
+                    Spacer()
+                    Text(state.detectedProviders.isEmpty ? "Install any one" : "Ready")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(state.detectedProviders.isEmpty
+                            ? .primary.opacity(0.45)
+                            : .green.opacity(0.9))
+                }
+                .padding(.horizontal, 2)
+
+                card {
+                    ForEach(Array(Provider.allCases.enumerated()), id: \.element) { index, provider in
+                        if index > 0 { divider() }
+                        providerRow(provider)
+                    }
+                }
+            }
+
+            PremiumButton(title: "Continue", action: advance)
+                .opacity(state.allReady ? 1.0 : 0.4)
+                .disabled(!state.allReady)
+                .animation(.easeOut(duration: 0.2), value: state.allReady)
+        }
+    }
+
+    @ViewBuilder
+    private func providerRow(_ provider: Provider) -> some View {
+        let detected = state.detectedProviders.contains(provider)
+        let needsSignIn = provider == .claude && detected && !state.claudeAuthenticated
+
+        SetupRow(
+            title: provider.displayName,
+            subtitle: detected
+                ? (needsSignIn ? "Detected · sign in if you haven't" : "Detected")
+                : provider.installCommand,
+            isComplete: detected,
+            actionTitle: needsSignIn ? "Sign in" : (provider == .ollama ? "Get" : "Install"),
+            action: {
+                if needsSignIn {
+                    SetupActions.signInToClaude()
+                } else {
+                    SetupActions.install(provider)
+                }
+            },
+            showActionWhenComplete: needsSignIn,
+            compact: true
+        )
+    }
+
+    private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(spacing: 0, content: content)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(Color.primary.opacity(0.04))
@@ -256,16 +303,6 @@ private struct SetupStep: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.5)
             )
-
-            Text("Auto-detects as each step completes.")
-                .font(.system(size: 10.5))
-                .foregroundColor(.primary.opacity(0.42))
-
-            PremiumButton(title: "Continue", action: advance)
-                .opacity(state.allReady ? 1.0 : 0.4)
-                .disabled(!state.allReady)
-                .animation(.easeOut(duration: 0.2), value: state.allReady)
-        }
     }
 
     private func divider() -> some View {
@@ -282,45 +319,36 @@ private struct SetupRow: View {
     let isComplete: Bool
     let actionTitle: String
     let action: () -> Void
-    var actionDisabled: Bool = false
-    var optional: Bool = false
+    var showActionWhenComplete: Bool = false
+    var compact: Bool = false
 
     var body: some View {
         HStack(spacing: 12) {
             statusBadge
 
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(title)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.primary.opacity(isComplete ? 0.55 : 0.92))
-                        .strikethrough(isComplete, color: .primary.opacity(0.35))
-                    if optional, !isComplete {
-                        Text("Optional")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(.primary.opacity(0.45))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1.5)
-                            .background(
-                                Capsule().fill(Color.primary.opacity(0.08))
-                            )
-                    }
-                }
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.primary.opacity(isComplete ? 0.6 : 0.92))
                 Text(subtitle)
-                    .font(.system(size: 11))
+                    .font(.system(size: 10.5, design: subtitleIsCommand ? .monospaced : .default))
                     .foregroundColor(.primary.opacity(0.45))
-                    .lineLimit(isComplete ? 1 : 2)
+                    .lineLimit(compact ? 1 : 2)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer()
 
-            if !isComplete {
-                SmallActionButton(title: actionTitle, action: action, disabled: actionDisabled)
+            if !isComplete || showActionWhenComplete {
+                SmallActionButton(title: actionTitle, action: action)
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 11)
+        .padding(.vertical, compact ? 8 : 11)
+    }
+
+    private var subtitleIsCommand: Bool {
+        subtitle.hasPrefix("npm ")
     }
 
     @ViewBuilder
@@ -375,9 +403,11 @@ private struct SmallActionButton: View {
 
 private struct ReadyStep: View {
     let complete: () -> Void
+    @State private var practice = "cue makes writing effortless and i love it"
+    @FocusState private var practiceFocused: Bool
 
     var body: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 16) {
             HStack(spacing: 8) {
                 KeyCap(label: "⌘")
                 Text("·")
@@ -387,17 +417,38 @@ private struct ReadyStep: View {
             }
 
             VStack(spacing: 6) {
-                Text("Double-tap right ⌘")
+                Text("Try it right here")
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundColor(.primary)
-                Text("In any text field. Cue appears. Type your instruction.")
+                Text("Click the field, double-tap right ⌘, then ask for \"title case\" or \"make it punchier\".")
                     .font(.system(size: 12.5))
                     .foregroundColor(.primary.opacity(0.6))
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 340)
             }
 
-            VStack(alignment: .leading, spacing: 7) {
+            TextField("Type anything…", text: $practice, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .foregroundColor(.primary.opacity(0.9))
+                .lineLimit(2...3)
+                .focused($practiceFocused)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.primary.opacity(0.05))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(
+                            practiceFocused ? Color.accentColor.opacity(0.5) : Color.white.opacity(0.08),
+                            lineWidth: practiceFocused ? 1 : 0.5
+                        )
+                )
+                .frame(maxWidth: 340)
+
+            VStack(alignment: .leading, spacing: 6) {
                 shortcutRow("⌘↩",  "Replace field")
                 shortcutRow("⌘↓",  "Append to field")
                 shortcutRow("⌘C",  "Copy")
@@ -408,13 +459,15 @@ private struct ReadyStep: View {
 
             HStack(spacing: 6) {
                 CaretLogo(size: 11)
-                Text("Look top-right in your menu bar")
+                Text("Engine and model live in the menu bar, top right")
                     .font(.system(size: 10.5))
                     .foregroundColor(.primary.opacity(0.45))
             }
 
-            Spacer().frame(height: 2)
             PremiumButton(title: "I'm ready", action: complete)
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { practiceFocused = true }
         }
     }
 
