@@ -2,9 +2,15 @@
 
 An inline AI assistant for every text field on macOS. Powered by the AI CLIs you already have.
 
+## Install
+
+**[Download Cue.dmg](https://github.com/Kapersky1337/cue/releases/latest)** — signed, notarized, universal (Apple Silicon + Intel), macOS 14+.
+
+Drag to Applications, launch, and follow the 30-second onboarding.
+
 ## What it does
 
-Double-tap **Right Command** anywhere. A single input appears. Type. Hit enter. The answer pastes in.
+Double-tap **Right Command** anywhere (or press **⇧⌥Space**). A single input appears. Type. Hit enter. The answer pastes in.
 
 - **Empty field**: ask anything, the answer streams in.
 - **Selection or field content**: transform it (rewrite, shorten, sharpen, fix, translate).
@@ -38,9 +44,17 @@ Grant Accessibility permission when prompted (System Settings → Privacy & Secu
 
 ## Architecture
 
-- `HotkeyMonitor` — global + local double-tap detection on Right Command (keyCode 54).
+- `HotkeyMonitor` — CGEventTap double-tap detection on Right Command (keyCode 54), self-healing on macOS timeout-disable, plus a permissionless ⇧⌥Space Carbon hotkey.
 - `CursorLocator` — AX API → focused element → `AXBoundsForRange` for caret rect, fallback to element frame, fallback to mouse.
 - `CaretPanel` — borderless non-activating `NSPanel` with SwiftUI `TextField`, clamped to screen.
 - `Providers` — engine detection, binary resolution, per-engine model lists.
 - `LLMClient` — spawns the active engine's CLI with a tight paste-contract prompt; streams where the CLI can.
 - `TextInserter` — stash pasteboard → set answer → reactivate prior app → synthesize ⌘V → restore pasteboard.
+
+## Contributing
+
+Issues and PRs welcome. Read `CLAUDE.md` for the architecture map and the taste rules the codebase follows — the short version: smallest diff that achieves the goal, no dead code, errors recover instead of crash, and hotkey reliability is sacred.
+
+## License
+
+[MIT](LICENSE) © Zeel Patel
