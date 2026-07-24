@@ -16,7 +16,7 @@ Double-tap **Right Command** anywhere (or press **⇧⌥Space**). A single input
 - **Selection or field content**: transform it (rewrite, shorten, sharpen, fix, translate).
 - **Anywhere**: Slack, iMessage, Gmail, Notion, Linear, Cursor, terminal, browser.
 
-Runs on whichever engine you have installed — no keys, no subscription, no cloud middleman:
+Runs on whichever engine you have installed. Cue uses your existing CLI auth, so there are no API keys to manage:
 
 | Engine | CLI | Notes |
 | --- | --- | --- |
